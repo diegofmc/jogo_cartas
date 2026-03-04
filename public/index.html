@@ -69,7 +69,18 @@
       position: relative;
     }
 
-    #carta-mesa { margin: 10px auto; transform: scale(1.2); pointer-events: none;}
+    /* Container da pilha de descarte */
+    #pilha-mesa {
+        position: relative;
+        width: 95px;
+        height: 140px;
+        margin: 10px auto;
+        transform: scale(1.2);
+        pointer-events: none;
+    }
+    #pilha-mesa .card {
+        position: absolute; top: 0; left: 0; margin: 0; box-shadow: 1px 1px 4px rgba(0,0,0,0.3);
+    }
 
     /* --- JOGADORES AO REDOR DA MESA --- */
     #outros-jogadores-container {
@@ -237,7 +248,7 @@
             <svg viewBox="0 0 24 24"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg>
         </div>
         <div id="outros-jogadores-container"></div>
-        <div id="carta-mesa" class="card"></div>
+        <div id="pilha-mesa"></div>
         <p id="info-cor-atual" style="font-weight: bold; font-size: 1.2em; margin-top: 20px;"></p>
         <button class="btn" onclick="comprarCarta()" style="background-color: #607d8b; margin-top:10px; pointer-events: auto;">+ Comprar</button>
         <div id="seletor-cor" style="z-index: 150;">
@@ -533,11 +544,21 @@
         indicadorSvg.setAttribute('class', estado.sentido === 'Horário' ? "anim-horario" : "anim-anti-horario");
     }
 
-    if (estado.carta_mesa) {
-      const mesa = document.getElementById('carta-mesa');
-      const classeCor = "cor-" + estado.carta_mesa.cor.split(' ')[0];
-      mesa.className = "card " + classeCor;
-      mesa.innerHTML = `<div class="card-inner">${getCardContent(estado.carta_mesa.valor)}</div>`;
+    // Renderiza a pilha de cartas
+    const containerPilha = document.getElementById('pilha-mesa');
+    containerPilha.innerHTML = '';
+    
+    if (estado.pilha_mesa && estado.pilha_mesa.length > 0) {
+      estado.pilha_mesa.forEach((carta, i) => {
+          const div = document.createElement('div');
+          const classeCor = "cor-" + carta.cor.split(' ')[0];
+          div.className = "card " + classeCor;
+          div.innerHTML = `<div class="card-inner">${getCardContent(carta.valor)}</div>`;
+          // Rotaciona levemente as cartas de baixo para dar efeito de bagunça
+          let rot = (i < estado.pilha_mesa.length - 1) ? (Math.sin(i * 99) * 15) : 0;
+          div.style.transform = `rotate(${rot}deg)`;
+          containerPilha.appendChild(div);
+      });
       document.getElementById('info-cor-atual').innerText = estado.cor_atual ? estado.cor_atual.split(' ')[0] : '';
     }
 

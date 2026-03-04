@@ -127,6 +127,7 @@ function enviarEstadoParaTodos(roomId) {
         const estado = {
             minha_mao: info.mao,
             carta_mesa: game.pile.length > 0 ? game.pile[game.pile.length - 1] : null,
+            pilha_mesa: game.pile.slice(-5), // Envia as últimas 5 cartas para efeito visual
             cor_atual: game.current_color,
             valor_atual: game.current_value,
             eh_minha_vez: (pid === jogadorAtualId && info.connected),
