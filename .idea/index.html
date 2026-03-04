@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>EcoCartas - Multijogador</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+  <style>
+    body { font-family: 'Segoe UI', sans-serif; background: linear-gradient(135deg, #e8f5e9, #c8e6c9); margin: 0; padding: 20px; text-align: center; min-height: 100vh; overflow-x: hidden;}
+
+    #toast { position: fixed; top: 20px; right: 20px; padding: 15px 25px; border-radius: 8px; color: white; font-weight: bold; opacity: 0; transform: translateX(100%); transition: all 0.4s ease-out; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+    .toast-show { opacity: 1 !important; transform: translateX(0) !important; }
+
+    .area-jogo { display: none; position: relative; max-width: 800px; margin: 0 auto; padding-top: 50px;}
+
+    .card {
+      display: inline-block; width: 90px; height: 130px; border-radius: 12px; border: 3px solid rgba(255,255,255,0.4); margin: -10px; text-align: center; vertical-align: top; box-shadow: 0 6px 10px rgba(0,0,0,0.3); cursor: pointer; position: relative; transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+      background-image: linear-gradient(145deg, rgba(255,255,255,0.2), rgba(0,0,0,0.1));
+    }
+
+    .minha-mao .card:hover { transform: translateY(-25px) scale(1.1); z-index: 10; border-color: white; box-shadow: 0 15px 20px rgba(0,0,0,0.4); }
+
+    .card-inner { padding-top: 25px; font-weight: 900; font-size: 1.2em; text-shadow: 1px 1px 2px rgba(0,0,0,0.4); line-height: 1.2;}
+    .tema-carta { font-size: 0.5em; display: block; margin-top: 10px; font-weight: normal; opacity: 0.9;}
+
+    /* --- LAYOUT DA MESA CENTRAL --- */
+    .mesa-redonda {
+      background: radial-gradient(circle, rgba(255,255,255,0.8) 0%, rgba(200,230,201,0.6) 100%);
+      padding: 40px; border-radius: 50%; width: 400px; height: 400px; margin: 50px auto;
+      box-shadow: inset 0 0 20px rgba(0,0,0,0.1), 0 10px 30px rgba(0,0,0,0.1);
+      display: flex; flex-direction: column; justify-content: center; align-items: center;
+      position: relative; border: 5px solid rgba(255,255,255,0.5);
+    }
+
+    #carta-mesa { margin: 10px auto; transform: scale(1.2); pointer-events: none;}
+
+    /* --- JOGADORES AO REDOR DA MESA --- */
+    #outros-jogadores-container {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;
+    }
+
+    .oponente {
+      position: absolute; text-align: center; width: 150px;
+      /* Centralizando a âncora do oponente no meio dele mesmo */
+      transform: translate(-50%, -50%);
+    }
+
+    .oponente-nome {
+      background: rgba(0,0,0,0.7); color: white; padding: 5px 10px; border-radius: 20px;
+      font-size: 0.9em; font-weight: bold; margin-bottom: 5px; display: inline-block; transition: background-color 0.3s;
+    }
+
+    .oponente-cartas {
+      display: flex; justify-content: center;
+    }
+
+    .carta-verso {
+      width: 30px; height: 45px; background-color: #388E3C;
+      border: 2px solid white; border-radius: 5px; margin: 0 -10px; /* Margem negativa para amontoar */
+      box-shadow: -2px 0 5px rgba(0,0,0,0.2);
+      background-image: repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(255,255,255,0.1) 5px, rgba(255,255,255,0.1) 10px);
+    }
+
+    .minha-mao { padding: 20px 20px 40px; overflow-x: auto; white-space: nowrap; margin-top: -30px;}
+
+    .cor-Azul { background-color: #2196F3; color: white; }
+    .cor-Verde { background-color: #4CAF50; color: white; }
+    .cor-Amarelo { background-color: #FFC107; color: black; }
+    .cor-Vermelho { background-color: #F44336; color: white; }
+    .cor-Especial { background-color: #212121; color: white; }
+
+    .btn { padding: 12px 25px; font-size: 16px; font-weight: bold; cursor: pointer; background-color: #333; color: white; border: none; border-radius: 8px; margin: 10px; transition: transform 0.2s, box-shadow 0.2s, background-color 0.2s;}
+    .btn:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.2); }
+    #seletor-cor { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 20px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); z-index: 100;}
+
+    .pulso { animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
+
+    /* Animação da carta "pousando" na mesa */
+    @keyframes landCard {
+      from { transform: scale(2) translateY(-100px); opacity: 0; }
+      to { transform: scale(1.2) translateY(0); opacity: 1; }
+    }
+
+    /* Animação para o modal do minijogo */
+    @keyframes modal-fade-in {
+      from { opacity: 0; transform: scale(0.8); }
+      to { opacity: 1; transform: scale(1); }
+    }
+  </style>
+</head>
+<body>
+
+<div id="toast">Notificação aqui</div>
+
+<h1>🌍 EcoCartas</h1>
+
+<div id="lobby">
+  <input type="text" id="nome_jogador" placeholder="Seu apelido..." style="padding:10px; border-radius:5px;">
+  <button class="btn" style="background-color: #4CAF50;" onclick="entrarSala()">Entrar na Sala</button>
+  <h3 id="lista-jogadores" style="color:#555;"></h3>
+  <button class="btn" id="btn-iniciar" style="display:none; background-color: #FF9800;" onclick="iniciarJogo()">Começar Jogo!</button>
+</div>
+
+<div id="area-jogo" class="area-jogo">
+
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h2 id="status-vez" style="padding: 10px; border-radius: 10px; margin:0;">Aguardando...</h2>
+    <p id="info-sentido" style="margin:0; font-weight:bold; background: rgba(255,255,255,0.5); padding: 5px 15px; border-radius: 20px;"></p>
+  </div>
+
+  <div class="mesa-redonda" id="mesa-container">
+    <div id="outros-jogadores-container"></div>
+
+    <div id="carta-mesa" class="card"></div>
+    <p id="info-cor-atual" style="font-weight: bold; font-size: 1.2em; margin-top: 20px;"></p>
+
+    <button class="btn" onclick="comprarCarta()" style="background-color: #607d8b; margin-top:10px; pointer-events: auto;">+ Comprar</button>
+
+    <div id="seletor-cor">
+      <h4 style="margin-top:0;">Escolha o tema:</h4>
+      <button class="btn" style="background:#2196F3" onclick="escolherCor('Azul (Água)')">Água</button>
+      <button class="btn" style="background:#4CAF50" onclick="escolherCor('Verde (Flora)')">Flora</button>
+      <button class="btn" style="background:#FFC107; color:black;" onclick="escolherCor('Amarelo (Energia)')">Energia</button>
+      <button class="btn" style="background:#F44336" onclick="escolherCor('Vermelho (Reciclagem)')">Reciclagem</button>
+    </div>
+  </div>
+
+  <div class="minha-mao">
+    <div id="minhas-cartas"></div>
+  </div>
+</div>
+
+<!-- Modal do Minijogo -->
+<div id="minigame-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 2000; justify-content: center; align-items: center; backdrop-filter: blur(5px);">
+  <div style="background: white; padding: 30px; border-radius: 15px; text-align: center; max-width: 500px; box-shadow: 0 10px 40px rgba(0,0,0,0.5); animation: modal-fade-in 0.4s cubic-bezier(0.165, 0.84, 0.44, 1) forwards;">
+    <h3 id="minigame-pergunta">Pergunta do minigame?</h3>
+    <div id="minigame-opcoes" style="margin: 20px 0;"></div>
+    <p style="font-weight: bold; color: #d32f2f;">Tempo restante: <span id="minigame-timer">10</span>s</p>
+  </div>
+</div>
+
+<script>
+  const socket = io();
+  let meuTurno = false;
+  let indiceCoringa = null;
+
+  const nomesTematicos = {
+    'Pular': 'Burocracia<br><span class="tema-carta">(Pular Vez)</span>',
+    'Inverter': 'Circular<br><span class="tema-carta">(Inverter)</span>',
+    '+2': 'Mutirão<br><span class="tema-carta">(Compre 2)</span>',
+    '+4': 'Desastre<br><span class="tema-carta">(Compre 4)</span>',
+    'Coringa': 'Inovação<br><span class="tema-carta">(Escolher Cor)</span>',
+    'Troca Cor Aleatória': 'Tempestade<br><span class="tema-carta">(Cor Aleatória)</span>',
+    'Minijogo Surpresa': 'Desafio ESG<br><span class="tema-carta">(Minijogo)</span>'
+  };
+
+  function mostrarToast(msg, tipo = 'info') {
+    const toast = document.getElementById('toast');
+    toast.innerHTML = msg;
+    toast.style.background = tipo === 'erro' ? '#F44336' : '#4CAF50';
+    toast.classList.add('toast-show');
+    setTimeout(() => toast.classList.remove('toast-show'), 3000);
+  }
+
+  socket.on('notificacao', function(data) { mostrarToast(data.msg, data.tipo); });
+
+  // Ao conectar, tenta reconectar se já tiver um ID
+  socket.on('connect', function() {
+    const player_id = localStorage.getItem('player_id');
+    if (player_id) socket.emit('entrar_jogo', { player_id: player_id });
+  });
+
+  function entrarSala() {
+    const nome = document.getElementById('nome_jogador').value;
+    if(!nome) return mostrarToast('Digite um nome!', 'erro');
+    socket.emit('entrar_jogo', {nome: nome});
+    document.getElementById('nome_jogador').style.display = 'none';
+  }
+
+  socket.on('id_atribuido', function(data) {
+    localStorage.setItem('player_id', data.player_id);
+  });
+
+  function iniciarJogo() { socket.emit('iniciar_jogo'); }
+
+  // --- FUNÇÃO PARA DESENHAR OS OPONENTES EM CÍRCULO ---
+  function desenharOponentes(oponentes) {
+    const container = document.getElementById('outros-jogadores-container');
+    container.innerHTML = '';
+
+    const numOponentes = oponentes.length;
+    if (numOponentes === 0) return;
+
+    // Raio da mesa para posicionar os jogadores (metade do tamanho da mesa + uma margem)
+    const radius = 220;
+
+    oponentes.forEach((op, index) => {
+      // Calcula o ângulo para distribuir os jogadores uniformemente na parte superior da mesa
+      // Começa em -180 graus (esquerda) e vai até 0 (direita), formando um arco por cima
+      let angle;
+      if (numOponentes === 1) angle = Math.PI + (Math.PI / 2); // Topo centro
+      else angle = Math.PI + (index * (Math.PI / (numOponentes - 1))); // Arco
+
+      // Converter coordenada polar para cartesiana e centralizar no container (que tem 400x400)
+      const x = 200 + radius * Math.cos(angle);
+      const y = 200 + radius * Math.sin(angle);
+
+      const divOp = document.createElement('div');
+      divOp.className = 'oponente';
+      divOp.style.left = `${x}px`;
+      divOp.style.top = `${y}px`;
+
+      // Gerar as cartinhas viradas para baixo amontoadas
+      let cartasHTML = '';
+      for(let i=0; i < op.cartas_na_mao; i++) {
+        cartasHTML += `<div class="carta-verso"></div>`;
+      }
+
+      const nomeClass = op.connected ? '' : 'style="background-color: #9e9e9e;"'; // Cinza se desconectado
+
+      divOp.innerHTML = `
+                    <div class="oponente-nome" ${nomeClass}>
+                        ${op.nome} (${op.cartas_na_mao}) ${!op.connected ? ' (Offline)' : ''}
+                    </div>
+                    <div class="oponente-cartas">${cartasHTML}</div>
+                `;
+      container.appendChild(divOp);
+    });
+  }
+
+  socket.on('estado_jogo', function(estado) {
+    if (!estado.jogo_iniciado) {
+      const jogadoresConectados = estado.jogadores_na_sala || [];
+      document.getElementById('lista-jogadores').innerText = "Jogadores na sala: " + jogadoresConectados.join(', ');
+      if (jogadoresConectados.length >= 2) {
+        document.getElementById('btn-iniciar').style.display = 'inline-block';
+      }
+      document.getElementById('lobby').style.display = 'block';
+      return;
+    }
+
+    document.getElementById('lobby').style.display = 'none';
+    document.getElementById('area-jogo').style.display = 'block';
+
+    meuTurno = estado.eh_minha_vez;
+    const statusVez = document.getElementById('status-vez');
+    statusVez.innerText = meuTurno ? "🎮 É SUA VEZ!" : "Aguarde...";
+    statusVez.style.background = meuTurno ? "#FFEB3B" : "transparent";
+    statusVez.className = meuTurno ? "pulso" : "";
+
+    document.getElementById('info-sentido').innerText = estado.sentido === 'Horário' ? "↻ Horário" : "↺ Anti-horário";
+
+    // Atualiza a carta da mesa
+    if (estado.carta_mesa) {
+      const mesa = document.getElementById('carta-mesa');
+      const classeCor = "cor-" + estado.carta_mesa.cor.split(' ')[0];
+      mesa.className = "card " + classeCor;
+      const valorDisplay = nomesTematicos[estado.carta_mesa.valor] || estado.carta_mesa.valor;
+      mesa.innerHTML = `<div class="card-inner">${valorDisplay}</div>`;
+      document.getElementById('info-cor-atual').innerText = estado.cor_atual ? estado.cor_atual.split(' ')[0] : '';
+    }
+
+    // Desenha os outros jogadores ao redor da mesa
+    desenharOponentes(estado.outros_jogadores);
+
+    // Atualiza a própria mão
+    const divCartas = document.getElementById('minhas-cartas');
+    divCartas.innerHTML = '';
+    estado.minha_mao.forEach((carta, index) => {
+      const div = document.createElement('div');
+      const classeCor = "cor-" + carta.cor.split(' ')[0];
+      div.className = "card " + classeCor;
+      const valorDisplay = nomesTematicos[carta.valor] || carta.valor;
+      div.innerHTML = `<div class="card-inner">${valorDisplay}</div>`;
+      div.onclick = () => tentarJogar(index, carta);
+      divCartas.appendChild(div);
+    });
+  });
+
+  socket.on('mensagem_vitoria', function(data) {
+    alert(`🎉 VITÓRIA! ${data.vencedor} salvou o planeta! 🎉`);
+    localStorage.removeItem('player_id'); // Limpa o ID para o próximo jogo
+    location.reload();
+  });
+
+  socket.on('minijogo', function(desafio) {
+    const modal = document.getElementById('minigame-modal');
+    const perguntaEl = document.getElementById('minigame-pergunta');
+    const opcoesEl = document.getElementById('minigame-opcoes');
+    const timerEl = document.getElementById('minigame-timer');
+
+    perguntaEl.innerText = desafio.pergunta;
+    opcoesEl.innerHTML = '';
+    timerEl.innerText = 10;
+
+    desafio.opcoes.forEach(opcao => {
+      const btn = document.createElement('button');
+      btn.className = 'btn';
+      btn.innerText = opcao;
+      btn.onclick = () => {
+        const acertou = (opcao === desafio.resposta);
+        finalizarMinijogo(acertou);
+      };
+      opcoesEl.appendChild(btn);
+    });
+
+    modal.style.display = 'flex';
+
+    let tempoRestante = 10;
+    minigameTimerId = setInterval(() => {
+      tempoRestante--;
+      timerEl.innerText = tempoRestante;
+      if (tempoRestante <= 0) {
+        finalizarMinijogo(false); // Tempo esgotado, errou
+      }
+    }, 1000);
+  });
+
+  function finalizarMinijogo(acertou) {
+    clearInterval(minigameTimerId);
+    document.getElementById('minigame-modal').style.display = 'none';
+    socket.emit('resposta_minijogo', { acertou: acertou });
+  }
+
+  function tentarJogar(index, carta) {
+    if (!meuTurno) return mostrarToast("Não é sua vez!", "erro");
+    if (carta.cor === 'Especial') {
+      indiceCoringa = index;
+      document.getElementById('seletor-cor').style.display = 'block';
+    } else {
+      socket.emit('jogar_carta', { indice: index });
+    }
+  }
+
+  function escolherCor(novaCor) {
+    if (indiceCoringa !== null) {
+      socket.emit('jogar_carta', { indice: indiceCoringa, nova_cor: novaCor });
+      indiceCoringa = null;
+      document.getElementById('seletor-cor').style.display = 'none';
+    }
+  }
+
+  function comprarCarta() {
+    if (!meuTurno) return mostrarToast("Não é sua vez!", "erro");
+    socket.emit('comprar_carta');
+  }
+</script>
+</body>
+</html>

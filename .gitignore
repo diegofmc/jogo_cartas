@@ -1,0 +1,32 @@
+# Dependências do Node.js
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Arquivos de ambiente (segredos e configurações locais)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Arquivos de Sistema Operacional
+.DS_Store
+Thumbs.db
+
+# IDEs e Editores de Texto
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Arquivos de Build e Distribuição (caso adicione no futuro)
+dist/
+build/
+coverage/
+
+# Logs gerais
+logs/
+*.log
+/.idea/
+/.idea/
